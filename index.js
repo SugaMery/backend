@@ -11,6 +11,8 @@ const path = require('path');
 const ejs = require('ejs');
 const pdf = require('html-pdf');
 const fs = require('fs');
+const Docxtemplater = require('docxtemplater');
+const JSZip = require('jszip');
 const app = express();
 app.use(cors());
 const port = 3000;
@@ -23,26 +25,34 @@ const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',
     password: '123456789',
-    database: 'myallo',
+    database: 'database_myallo',
 });
 
 // Registration
+
 app.post('/users', async (req, res) => {
-    const { nom, prenom, telephone, email, role, password } = req.body;
+    const { last_name, first_name, telephone, email, role, password } = req.body;
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-    const sql = 'INSERT INTO users (nom, prenom, telephone, email, role, password) VALUES (?, ?, ?, ?, ?, ?)';
-    db.query(sql, [nom, prenom, telephone, email, role, hashedPassword], (err, result) => {
-        if (err) {
-            console.error(err);
-            res.status(500).json({ message: 'Internal Server Error' });
-            return;
-        }
+        // SQL query with the new table and column names
+        const sql = 'INSERT INTO users (last_name, first_name, telephone, email, role, password) VALUES (?, ?, ?, ?, ?, ?)';
 
-        res.json({ message: 'User created successfully', id: result.insertId });
-    });
+        db.query(sql, [last_name, first_name, telephone, email, role, hashedPassword], (err, result) => {
+            if (err) {
+                console.error(err);
+                res.status(500).json({ message: 'Internal Server Error' });
+                return;
+            }
+
+            res.json({ message: 'User created successfully', id: result.insertId });
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
 });
 
 // ... (rest of your code)
@@ -50,9 +60,15 @@ app.post('/users', async (req, res) => {
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
 
+    // SQL query with the new table and column names
     const sql = 'SELECT * FROM users WHERE email = ?';
+
     db.query(sql, [email], async (err, results) => {
-        if (err) throw err;
+        if (err) {
+            console.error(err);
+            res.status(500).json({ message: 'Internal Server Error' });
+            return;
+        }
 
         if (results.length > 0) {
             const user = results[0];
@@ -73,12 +89,14 @@ app.post('/login', (req, res) => {
     });
 });
 
-
+// Update endpoint for creating addresses
 app.post('/addresses', (req, res) => {
-    const { address_line1, address_line2, location_id } = req.body;
+    const { address_line1, address_line2, location_id, customer_id } = req.body;
 
-    const sql = 'INSERT INTO Address (address_line1, address_line2, location_id) VALUES (?, ?, ?)';
-    db.query(sql, [address_line1, address_line2, location_id], (err, result) => {
+    // SQL query with the new table and column names
+    const sql = 'INSERT INTO addresses (address_line1, address_line2, location_id, customer_id) VALUES (?, ?, ?, ?)';
+
+    db.query(sql, [address_line1, address_line2, location_id, customer_id], (err, result) => {
         if (err) {
             console.error(err);
             res.status(500).json({ message: 'Internal Server Error' });
@@ -89,12 +107,14 @@ app.post('/addresses', (req, res) => {
     });
 });
 
-// Similar endpoints can be added for Customer, FinancialInformation, etc.
+// Update endpoint for creating customers
 app.post('/customers', (req, res) => {
-    const { address_id, civility, firstname, lastname, email, phone, birthdate, company } = req.body;
+    const { civility, firstname, lastname, email, phone, birthdate, company } = req.body;
 
-    const sql = 'INSERT INTO Customer (address_id, civility, firstname, lastname, email, phone, birthdate, company) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-    db.query(sql, [address_id, civility, firstname, lastname, email, phone, birthdate, company], (err, result) => {
+    // SQL query with the new table and column names
+    const sql = 'INSERT INTO customers (civility, firstname, lastname, email, phone, birthdate, company) VALUES (?, ?, ?, ?, ?, ?, ?)';
+
+    db.query(sql, [civility, firstname, lastname, email, phone, birthdate, company], (err, result) => {
         if (err) {
             console.error(err);
             res.status(500).json({ message: 'Internal Server Error' });
@@ -108,7 +128,9 @@ app.post('/customers', (req, res) => {
 app.post('/financialinformation', (req, res) => {
     const { customer_id, iban, bic, payment_day } = req.body;
 
-    const sql = 'INSERT INTO FinancialInformation (customer_id, iban, bic, payment_day) VALUES (?, ?, ?, ?)';
+    // SQL query with the new table and column names
+    const sql = 'INSERT INTO financialinformations (customer_id, iban, bic, payment_day) VALUES (?, ?, ?, ?)';
+
     db.query(sql, [customer_id, iban, bic, payment_day], (err, result) => {
         if (err) {
             console.error(err);
@@ -123,7 +145,9 @@ app.post('/financialinformation', (req, res) => {
 app.post('/locations', (req, res) => {
     const { zipcode, city, country } = req.body;
 
-    const sql = 'INSERT INTO Location (zipcode, city, country) VALUES (?, ?, ?)';
+    // SQL query with the new table and column names
+    const sql = 'INSERT INTO locations (zipcode, city, country) VALUES (?, ?, ?)';
+
     db.query(sql, [zipcode, city, country], (err, result) => {
         if (err) {
             console.error(err);
@@ -136,9 +160,11 @@ app.post('/locations', (req, res) => {
 });
 
 app.post('/options', (req, res) => {
-    const { client_id, agent_id, start_date, end_date, contract_forfait,status } = req.body;
+    const { client_id, agent_id, contract_forfait, status } = req.body;
 
-    const sql = 'INSERT INTO Options (client_id, agent_id, contract_forfait,status) VALUES (?,?,?,?)';
+    // SQL query with the new table and column names
+    const sql = 'INSERT INTO options (client_id, agent_id, contract_forfait, status) VALUES (?, ?, ?, ?)';
+
     db.query(sql, [client_id, agent_id, contract_forfait, status], (err, result) => {
         if (err) {
             console.error(err);
@@ -150,7 +176,6 @@ app.post('/options', (req, res) => {
     });
 });
 
-
 // ... (your existing code)
 
 // Update Option Status
@@ -158,7 +183,9 @@ app.put('/options/:optionId/status', (req, res) => {
     const optionId = req.params.optionId;
     const { status } = req.body;
 
-    const sql = 'UPDATE Options SET status = ? WHERE id = ?';
+    // SQL query with the new table and column names
+    const sql = 'UPDATE options SET status = ? WHERE id = ?';
+
     db.query(sql, [status, optionId], (err, result) => {
         if (err) {
             console.error(err);
@@ -179,23 +206,24 @@ app.put('/options/:optionId/status', (req, res) => {
 app.get('/options/:agentId', (req, res) => {
     const agentId = req.params.agentId;
 
+    // SQL query with the new table and column names
     const sql = `
         SELECT
-            Options.*,
-            Customer.firstname AS customer_nom,
-            Customer.lastname AS customer_prenom,
-            Address.address_line1,
-            Address.address_line2,
-            Location.zipcode,
-            Location.city,
-            Location.country
+            options.*,
+            customers.firstname AS customer_nom,
+            customers.lastname AS customer_prenom,
+            addresses.address_line1,
+            addresses.address_line2,
+            locations.zipcode,
+            locations.city,
+            locations.country
         FROM
-            Options
-        INNER JOIN Customer ON Options.client_id = Customer.id
-        INNER JOIN Address ON Customer.address_id = Address.id
-        INNER JOIN Location ON Address.location_id = Location.id
+            options
+        INNER JOIN customers ON options.client_id = customers.id
+        INNER JOIN addresses ON customers.id = addresses.customer_id
+        INNER JOIN locations ON addresses.location_id = locations.id
         WHERE
-            Options.agent_id = ?
+            options.agent_id = ?
     `;
 
     db.query(sql, [agentId], (err, results) => {
@@ -211,34 +239,55 @@ app.get('/options/:agentId', (req, res) => {
 
 
 
-
 // ... (your existing code)
 
-// Use EJS template engine
-app.set('view engine', 'ejs');
 
-// Endpoint to generate contract
-// Endpoint to generate contract
+
+
+
+
+app.set('view engine', 'word'); // Change the view engine to 'word'
+const moment = require('moment');
+
+
+
 app.post('/generate-contract/:optionId', async (req, res) => {
     const optionId = req.params.optionId;
 
+    // Log the received optionId for debugging
+    console.log('Received optionId:', optionId);
+
     // Fetch data needed for the contract
     const sql = `
-    SELECT
-         Options.*,
-            Customer.firstname AS firstname,
-            Customer.lastname As lastname,
-            Customer.email AS customer_email,
-            Users.nom AS agent_firstname,
-            Users.prenom AS agent_lastname
-        -- Add other necessary fields for the contract
+        SELECT
+            Options.*,
+            Customers.firstname AS firstname,
+            Customers.lastname AS lastname,
+            Customers.email AS email,
+            Customers.birthdate AS birthdate,
+            Customers.phone AS phone,
+            Users.first_name AS agent_firstname,
+            Users.last_name AS agent_lastname,
+            Locations.city AS city,
+            Locations.zipcode AS zipcode,
+            Addresses.address_line1 AS address_line1,
+            Addresses.address_line2 AS address_line2,
+            FinancialInformations.payment_day AS payment_day 
         FROM
             Options
-                INNER JOIN Customer ON Options.client_id = Customer.id
+                INNER JOIN Customers ON Options.client_id = Customers.id
                 INNER JOIN Users ON Options.agent_id = Users.id
+                INNER JOIN Addresses ON customers.id = Addresses.customer_id
+                INNER JOIN Locations ON Addresses.location_id = Locations.id
+                INNER JOIN FinancialInformations ON Customers.id = FinancialInformations.customer_id
         WHERE
-            Options.id = ?
-    `;
+            Options.id = ?;
+    
+`;
+
+    // Log the SQL query and its parameters for debugging
+    console.log('SQL Query:', sql);
+    console.log('SQL Parameters:', [optionId]);
 
     db.query(sql, [optionId], async (err, results) => {
         if (err) {
@@ -247,6 +296,9 @@ app.post('/generate-contract/:optionId', async (req, res) => {
             return;
         }
 
+        // Log the results for debugging
+        console.log('Query Results:', results);
+
         if (results.length === 0) {
             res.status(404).json({ message: 'Option not found' });
             return;
@@ -254,34 +306,59 @@ app.post('/generate-contract/:optionId', async (req, res) => {
 
         const option = results[0];
 
-        // Render EJS template
-        ejs.renderFile('views/contract.ejs', { option }, (err, html) => {
-            if (err) {
-                console.error(err);
-                res.status(500).json({ message: 'Internal Server Error' });
-                return;
-            }
+        // Read the Word template file
+        const templatePath = path.join(__dirname, 'views', 'contart_1.docx');
+        const templateContent = fs.readFileSync(templatePath, 'binary');
 
-            // Options for PDF
-            const pdfOptions = { format: 'Letter' };
+        // Create a docxtemplater instance
+        const zip = new JSZip(templateContent);
+        const doc = new Docxtemplater();
+        doc.loadZip(zip);
 
-            // Generate PDF from HTML
-            const pdfPath = path.join(__dirname, `contract_${optionId}.pdf`);
-            pdf.create(html, pdfOptions).toFile(pdfPath, (err) => {
-                if (err) {
-                    console.error(err);
-                    res.status(500).json({ message: 'Internal Server Error' });
-                    return;
-                }
-
-                // Respond to the client with the path to the saved PDF
-                res.json({ message: 'Contract generated', pdfPath });
-            });
+        // Set data for the template
+        // Log the contents of the option object for debugging
+        console.log('Option:', option);
+        option.birthdate = moment(option.birthdate).format('MM/DD/YYYY');
+// Set data for the template
+        //doc.setData({ option });
+        // Set data for the template
+        doc.setData({
+            agent_lastname: option.agent_lastname,
+            agent_firstname: option.agent_firstname,
+            lastname: option.lastname,
+            email : option.email,
+            firstname: option.firstname,
+            birthdate : option.birthdate,
+            phone : option.phone,
+            city : option.city,
+            zipcode : option.zipcode,
+            address_line1 : option.address_line1,
+            ddress_line2 : option.ddress_line2,
+            contract_forfait : option.contract_forfait,
+            payment_day : option.payment_day
         });
+
+
+
+        try {
+            // Render the template
+            doc.render();
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: 'Error rendering template', error: error.message });
+            return;
+        }
+
+        // Save the generated Word document
+        const wordPath = path.join(__dirname, `contract_${optionId}.docx`);
+        fs.writeFileSync(wordPath, doc.getZip().generate({ type: 'nodebuffer' }));
+
+        // Respond to the client with the path to the saved Word document
+        res.json({ message: 'Contract generated', wordPath });
     });
 });
 
-// Start server
 app.listen(port, () => {
+
     console.log(`Server is running on port ${port}`);
 });
